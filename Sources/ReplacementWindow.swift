@@ -98,6 +98,12 @@ final class ReplacementWindowController: NSObject, NSWindowDelegate {
         }
     }
 
+    /// System Report always opens on Hardware, whatever was selected last time.
+    func presentSystemReport(coveringPID pid: pid_t) {
+        store.selection = Selection.hardware
+        present(coveringPID: pid)
+    }
+
     /// System Settings navigated to Device Management. Unlike System Report, System Settings
     /// is left running - the user may want other panes - so the replacement must actually
     /// cover its window rather than relying on the target being gone.

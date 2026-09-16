@@ -110,18 +110,27 @@ Appearance); its window title reads `""`, which is also what resets the in-pane 
 The AX signal is event-driven (`AXObserver` on focused-window and title changes) with a
 50 ms poll as fallback. Detection to window-front is ~2 ms.
 
-Two detection signals, because neither is sufficient:
+### Why the pane never renders
 
-| Signal | Permission | Covers |
+The pane is drawn by `ProfilesSettingsExt.appex`, which runs as its own process. It is
+**killed at exec**, exactly like System Information — the same guarantee for the same
+reason: a dead process cannot render. A screen recording of the previous design (title-based
+detection) showed Apple's pane fully rendered for 8+ frames before ours appeared; reacting
+to a title change is by construction a reaction to something already drawn.
+
+Killing the extension has a second effect that matters more. Left alive, the extension
+**persists** across navigation (verified: same pid after leaving the pane and returning), so
+its exec would only ever signal the first visit. Dead, System Settings must relaunch it on
+every visit — so the free, permission-less exec signal fires every time. Verified over three
+consecutive visits: exec → kill → cover, title never reached "Device Management", System
+Settings' pid and window count unchanged (no error alert).
+
+| Signal | Permission | Role |
 | --- | --- | --- |
-| `ProfilesSettingsExt.appex` exec | none | first visit per Settings session |
-| System Settings' focused-window AX title | Accessibility | every visit |
+| `ProfilesSettingsExt.appex` exec (+ kill) | none | primary, every visit |
+| System Settings' focused-window AX title | Accessibility | fallback only |
 
-`ProfilesSettingsExt.appex` genuinely runs as its own process, so its exec is a free
-signal. But it is spawned once and then **persists** across navigation — verified: the same
-pid after leaving the pane and returning — so on its own it only ever fires the first time.
-
-The Accessibility title covers the rest. The observed titles on this OS version were
+The Accessibility title remains as a fallback. The observed titles on this OS version were
 confirmed from the log rather than assumed:
 
 ```
@@ -135,8 +144,7 @@ Window titles via `CGWindowList` (`kCGWindowName`) would have avoided Accessibil
 that field requires **Screen Recording**, which is the heavier grant — and it returned nil
 without it, so it is not a free alternative.
 
-Without the Accessibility grant the app still works; Device Management detection is just
-limited to the first visit, and that is logged at startup.
+Without the Accessibility grant the app still works; only the title fallback is lost.
 
 ### What the pane reports
 
@@ -146,6 +154,8 @@ profiles" on a machine with many device-scope profiles installed. The pane uses 
 device-scope marker file `/var/db/ConfigurationProfiles/Settings/.profilesAreInstalled`
 instead, and labels profile contents as requiring administrator privileges rather than
 rendering them as "None".
+
+System Report always opens on Hardware, whatever pane was selected last.
 
 ## Full coverage
 

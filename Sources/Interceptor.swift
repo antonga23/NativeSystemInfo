@@ -110,7 +110,7 @@ final class Interceptor {
                 fire(pid)
             } else if path == DeviceManagementWatcher.profilesExtExecutable {
                 pending.removeValue(forKey: pid)
-                DispatchQueue.main.async { [weak self] in self?.onProfilesExtensionLaunched?() }
+                profilesExtensionLaunched(pid)
             } else if path != Interceptor.proxyPath && !path.isEmpty {
                 pending.removeValue(forKey: pid)   // became something else entirely
             }
@@ -121,11 +121,23 @@ final class Interceptor {
             if path == Interceptor.targetExecutable {
                 fire(pid)
             } else if path == DeviceManagementWatcher.profilesExtExecutable {
-                DispatchQueue.main.async { [weak self] in self?.onProfilesExtensionLaunched?() }
+                profilesExtensionLaunched(pid)
             } else if path == Interceptor.proxyPath || path.isEmpty {
                 pending[pid] = now.addingTimeInterval(3)
             }
         }
+    }
+
+    /// The Device Management pane is rendered by this extension process. Killing it at exec
+    /// does two things: the pane can never draw (the same guarantee System Report has), and
+    /// because the extension is then dead, System Settings must relaunch it on every visit -
+    /// which turns the otherwise first-visit-only exec signal into one that fires every time.
+    /// Verified: Settings relaunches it cleanly and stays on the pane's host window.
+    private func profilesExtensionLaunched(_ pid: pid_t) {
+        if CGEventSource.flagsState(.combinedSessionState).contains(.maskAlternate) { return }
+        let rc = kill(pid, SIGKILL)
+        Log.mark("profiles extension exec pid \(pid) - SIGKILL rc \(rc)")
+        DispatchQueue.main.async { [weak self] in self?.onProfilesExtensionLaunched?() }
     }
 
     private func fire(_ pid: pid_t) {

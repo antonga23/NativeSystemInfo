@@ -18,7 +18,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         ) { _ in Log.mark("ACTIVE SPACE CHANGED") }
 
         interceptor.onTrigger = { [weak controller] pid in
-            controller?.present(coveringPID: pid)
+            controller?.presentSystemReport(coveringPID: pid)
         }
         interceptor.onTargetResurfaced = { [weak controller] pid in
             controller?.reassert(coveringPID: pid)

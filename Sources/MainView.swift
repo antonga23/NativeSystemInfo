@@ -118,7 +118,7 @@ final class MainViewController: NSViewController, NSOutlineViewDataSource, NSOut
             sep.topAnchor.constraint(equalTo: status.topAnchor),
             sep.leadingAnchor.constraint(equalTo: status.leadingAnchor),
             sep.trailingAnchor.constraint(equalTo: status.trailingAnchor),
-            statusIcon.leadingAnchor.constraint(equalTo: sep.leadingAnchor, constant: 22),
+            statusIcon.leadingAnchor.constraint(equalTo: sep.leadingAnchor, constant: 17),
             statusIcon.centerYAnchor.constraint(equalTo: status.centerYAnchor),
             statusLabel.leadingAnchor.constraint(equalTo: statusIcon.trailingAnchor, constant: 6),
             statusLabel.centerYAnchor.constraint(equalTo: status.centerYAnchor),

@@ -36,6 +36,10 @@ final class ReplacementWindowController: NSObject, NSWindowDelegate {
         w.isReleasedWhenClosed = false
         w.minSize = NSSize(width: 840, height: 560)
         w.titlebarSeparatorStyle = .automatic
+        // Ordering the parked window front pins it to whatever Space is active at agent
+        // start. Presenting it later then triggers a Space switch - a ~700 ms desktop slide
+        // during which every window reports intermediate positions. Follow the user instead.
+        w.collectionBehavior = [.moveToActiveSpace]
         w.delegate = self
         w.contentView = NSHostingView(rootView: RootView(store: store))
         w.setFrameOrigin(offscreen)
@@ -64,13 +68,8 @@ final class ReplacementWindowController: NSObject, NSWindowDelegate {
         guard !presented else {
             // Already open: raise and take focus, otherwise a second System Report click
             // leaves the window buried behind whatever the user was looking at.
-            window.level = .floating
             window.makeKeyAndOrderFront(nil)
             NSApp.activate(ignoringOtherApps: true)
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
-                guard let self, self.presented else { return }
-                self.window.level = .normal
-            }
             return
         }
         presented = true
@@ -79,9 +78,12 @@ final class ReplacementWindowController: NSObject, NSWindowDelegate {
         // Getting pixels on screen comes first. Everything that is merely tidy - activation
         // policy, Dock icon, coverage checks - happens after, because setActivationPolicy
         // and the window-list query are slow enough to matter on this path.
+        // Never `.floating`, even briefly. A window whose first-ever ordering is at floating
+        // level is not placed on screen by the window server for ~1.2 s - AppKit reports
+        // isVisible == true throughout, CGWindowList says onscreen == no. Activation puts us
+        // in front on its own; the raised level bought nothing and cost the first present.
         window.allowOffscreen = false        // normal constraining while it is a real window
         window.setFrameOrigin(centeredFrame().origin)
-        window.level = .floating             // stay above the target while it is dealt with
         window.makeKeyAndOrderFront(nil)
         Log.mark("present() window ordered front")
 
@@ -92,10 +94,7 @@ final class ReplacementWindowController: NSObject, NSWindowDelegate {
             NSApp.setActivationPolicy(.regular)   // Dock icon + menu bar only while visible
             Log.mark("present() activation policy regular")
             self?.startCoverageWatch(pid: pid)
-        }
-
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
-            self?.window.level = .normal
+            self?.ensureOnScreen()
         }
     }
 
@@ -104,8 +103,10 @@ final class ReplacementWindowController: NSObject, NSWindowDelegate {
     /// cover its window rather than relying on the target being gone.
     func presentDeviceManagement(coveringPID pid: pid_t) {
         Log.mark("presenting device management")
+        store.expanded.insert("Management")      // before selection: a collapsed row can't be selected
         store.selection = Selection.deviceManagement
         store.loadDeviceManagement(force: true)
+        Log.mark("sidebar selection -> \(store.selection?.title ?? "nil"), expanded=\(store.expanded.sorted())")
 
         if !presented { present(coveringPID: pid) }
 
@@ -126,15 +127,35 @@ final class ReplacementWindowController: NSObject, NSWindowDelegate {
     /// sitting on top of the replacement.
     func reassert(coveringPID pid: pid_t) {
         guard presented else { return }
+        Log.mark("reassert: frame \(NSStringFromRect(window.frame)) visible=\(window.isVisible) onScreen=\(window.screen != nil)")
         if let target = Coverage.onScreenFrame(pid: pid), !window.frame.contains(target) {
             window.setFrame(Coverage.frameCovering(target, preferred: window.frame), display: true)
         }
-        window.level = .floating
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
-            guard let self, self.presented else { return }
-            self.window.level = .normal
+    }
+
+    private var onScreenTimer: Timer?
+
+    /// AppKit's `isVisible` is not the truth - it has reported true while the window server
+    /// had no record of the window on screen (observed on the first present after launch,
+    /// around the accessory->regular policy switch). Check the window list, which is what
+    /// the user actually sees, and re-order until it agrees.
+    private func ensureOnScreen() {
+        onScreenTimer?.invalidate()
+        let deadline = Date().addingTimeInterval(3)
+        let me = getpid()
+        var attempts = 0
+        onScreenTimer = Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { [weak self] t in
+            guard let self, self.presented, Date() < deadline else { t.invalidate(); return }
+            if Coverage.onScreenFrame(pid: me) != nil {
+                if attempts > 0 { Log.mark("ensureOnScreen: on screen after \(attempts) re-order(s)") }
+                t.invalidate()
+                return
+            }
+            attempts += 1
+            Log.mark("ensureOnScreen: window server has no on-screen window for us - re-ordering (#\(attempts))")
+            self.window.orderFrontRegardless()
         }
     }
 
@@ -144,12 +165,18 @@ final class ReplacementWindowController: NSObject, NSWindowDelegate {
         coverageTimer?.invalidate()
         guard let pid else { return }
         let deadline = Date().addingTimeInterval(3)
+        var previous: NSRect?
         coverageTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] t in
             guard let self, Date() < deadline else { t.invalidate(); return }
-            guard let target = Coverage.onScreenFrame(pid: pid) else { return }
-            guard !self.window.frame.contains(target) else { return }
-            self.window.setFrame(Coverage.frameCovering(target, preferred: self.window.frame),
-                                 display: true)
+            guard let target = Coverage.onScreenFrame(pid: pid) else { previous = nil; return }
+            // Only act on a target seen at the same place twice. During a pane change or a
+            // Space slide the target reports transient positions, and chasing those grew
+            // the window to full screen width.
+            defer { previous = target }
+            guard target == previous, !self.window.frame.contains(target) else { return }
+            let grown = Coverage.frameCovering(target, preferred: self.centeredFrame())
+            Log.mark("coverage watch: growing \(NSStringFromRect(self.window.frame)) -> \(NSStringFromRect(grown))")
+            self.window.setFrame(grown, display: true)
         }
     }
 
@@ -171,14 +198,16 @@ final class ReplacementWindowController: NSObject, NSWindowDelegate {
     /// Closing returns the app to its invisible state with the window re-warmed, ready for
     /// the next interception.
     func windowWillClose(_ notification: Notification) {
+        Log.mark("window closing -> idle")
         presented = false
         coverageTimer?.invalidate()
         coverageTimer = nil
+        onScreenTimer?.invalidate()
+        onScreenTimer = nil
 
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
             NSApp.setActivationPolicy(.accessory)
-            self.window.level = .normal
             self.window.allowOffscreen = true
             self.window.setFrameOrigin(self.offscreen)
             self.window.orderFrontRegardless()

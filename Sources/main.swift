@@ -12,6 +12,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         controller.prewarm()
 
+        // A Space switch during present means the window is on the wrong desktop.
+        NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.activeSpaceDidChangeNotification, object: nil, queue: .main
+        ) { _ in Log.mark("ACTIVE SPACE CHANGED") }
+
         interceptor.onTrigger = { [weak controller] pid in
             controller?.present(coveringPID: pid)
         }
@@ -23,8 +28,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         interceptor.start()
 
-        dmWatcher.onEnterPane = { [weak controller] pid in
+        dmWatcher.onEnterPane = { [weak controller, weak dmWatcher] pid in
             controller?.presentDeviceManagement(coveringPID: pid)
+            // Once covered, move Settings off the pane so closing the replacement does not
+            // reveal Apple's Device Management sitting underneath.
+            dmWatcher?.sendSettingsToGeneral()
         }
         dmWatcher.start()
 

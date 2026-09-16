@@ -186,6 +186,11 @@ final class SPReportStore: ObservableObject {
     @Published var selection: Selection? = Selection.hardware
     @Published var deviceManagement: DeviceManagementInfo?
 
+    /// Sidebar disclosure state, owned here so a programmatic selection can expand its
+    /// group first. SwiftUI's List drops a selection whose row is not rendered, so selecting
+    /// Device Management while "Management" was collapsed silently did nothing.
+    @Published var expanded: Set<String> = ["Hardware", "Management"]
+
     private var inFlight = Set<String>()
     private let queue = DispatchQueue(label: "sp.report", qos: .userInitiated, attributes: .concurrent)
 
@@ -203,7 +208,10 @@ final class SPReportStore: ObservableObject {
         if deviceManagement != nil && !force { return }
         queue.async { [weak self] in
             let info = DeviceManagement.collect()
-            DispatchQueue.main.async { self?.deviceManagement = info }
+            DispatchQueue.main.async {
+                self?.deviceManagement = info
+                Log.mark("device management data loaded: \(info.headline)")
+            }
         }
     }
 

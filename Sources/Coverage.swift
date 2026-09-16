@@ -8,15 +8,18 @@ import CoreGraphics
 /// Screen Recording permission - only window *titles* are gated. So this needs no TCC grant.
 enum Coverage {
 
-    /// Union of the target process's real, visible windows, in AppKit screen coordinates.
+    /// The target process's largest real, visible window, in AppKit screen coordinates.
     /// Returns nil when the process currently has nothing on screen.
+    ///
+    /// Largest, not a union: System Settings briefly shows a second window while it
+    /// navigates panes, and unioning with it grew the replacement to full screen width.
     static func onScreenFrame(pid: pid_t) -> NSRect? {
         let options: CGWindowListOption = [.optionOnScreenOnly, .excludeDesktopElements]
         guard let list = CGWindowListCopyWindowInfo(options, kCGNullWindowID) as? [[String: Any]] else {
             return nil
         }
 
-        var union: NSRect?
+        var largest: NSRect?
         for win in list {
             guard let owner = win[kCGWindowOwnerPID as String] as? pid_t, owner == pid,
                   let layer = win[kCGWindowLayer as String] as? Int, layer == 0,
@@ -30,9 +33,12 @@ enum Coverage {
             else { continue }
 
             let rect = flip(CGRect(x: x, y: y, width: w, height: h))
-            union = union.map { $0.union(rect) } ?? rect
+            if let current = largest, current.width * current.height >= rect.width * rect.height {
+                continue
+            }
+            largest = rect
         }
-        return union
+        return largest
     }
 
     /// CoreGraphics global space is flipped (origin top-left of the primary display);

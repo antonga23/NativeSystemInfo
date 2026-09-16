@@ -15,7 +15,6 @@ struct Selection: Hashable {
 
 struct RootView: View {
     @ObservedObject var store: SPReportStore
-    @State private var expanded: Set<String> = ["Hardware"]
 
     var body: some View {
         NavigationSplitView {
@@ -62,9 +61,9 @@ struct RootView: View {
 
     private func binding(for name: String) -> Binding<Bool> {
         Binding(
-            get: { expanded.contains(name) },
+            get: { store.expanded.contains(name) },
             set: { isOn in
-                if isOn { expanded.insert(name) } else { expanded.remove(name) }
+                if isOn { store.expanded.insert(name) } else { store.expanded.remove(name) }
             }
         )
     }

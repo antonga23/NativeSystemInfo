@@ -64,6 +64,18 @@ Four mechanisms, each load-bearing:
    for any follow-up check, because it is what the user actually sees.
 3. **Fast path first.** `present()` orders the window front *before* switching activation
    policy or querying the window list, both of which are slow enough to matter here.
+4. **Never `.floating`, and follow the active Space.** Two window-server findings, both
+   made with `winprobe.swift` (`kCGWindowIsOnscreen`), both invisible to AppKit:
+   - A window whose *first-ever* ordering is at `.floating` level is not placed on screen
+     for ~1.2 s. `isVisible` reports `true` the whole time; `onscreen` says `no`. The raised
+     level bought nothing (activation already puts us in front) and cost the first present.
+   - Ordering the parked window front pins it to whatever Space is active at agent start.
+     Presenting later then triggered a Space switch - a ~700 ms desktop slide in which every
+     window reports intermediate positions. `.moveToActiveSpace` fixes it; verified with
+     `activeSpaceDidChangeNotification` logging: zero changes during present.
+
+   `ensureOnScreen()` remains as a safety net: it polls the window list, not AppKit, and
+   re-orders until the window server agrees the window is on screen.
 
 Detection polls every 8 ms. No TCC permission is required for any of this —
 `proc_listallpids`, `proc_pidpath`, `kill()` and `CGWindowList` bounds are all ungated.
@@ -86,6 +98,17 @@ peeks out at the edges. Verified over three consecutive visits: replacement at
 `215,100 1082×853`, System Settings at `261,101 723×851` — fully contained, and stable in
 size. (Union against the *default* frame, not the current one; unioning with the current
 frame ratchets the window larger on every visit until it fills the screen.)
+
+When the pane is detected: the replacement is presented with Device Management selected
+(the sidebar group is expanded first - SwiftUI's `List` drops a selection whose row is not
+rendered), and System Settings is navigated back to General **underneath** it with
+`NSWorkspace.OpenConfiguration.activates = false`, so closing the replacement never reveals
+Apple's pane. General's identifier is `com.apple.systempreferences.GeneralSettings`
+(`com.apple.settings.General` is a no-op, `com.apple.preference.general` lands on
+Appearance); its window title reads `""`, which is also what resets the in-pane state.
+
+The AX signal is event-driven (`AXObserver` on focused-window and title changes) with a
+50 ms poll as fallback. Detection to window-front is ~2 ms.
 
 Two detection signals, because neither is sufficient:
 
@@ -129,7 +152,10 @@ rendering them as "None".
 `Coverage` reads the target's on-screen window bounds from `CGWindowListCopyWindowInfo`
 (owner pid, layer, alpha and bounds need no Screen Recording — only window *titles* do),
 converts CoreGraphics flipped coordinates to AppKit coordinates, and grows the
-replacement to cover the target completely so nothing peeks out at the edges.
+replacement to cover the target completely so nothing peeks out at the edges. It covers
+the target's **largest** window, not a union: System Settings briefly shows a second window
+while changing panes, and unioning with it grew the replacement to full screen width. The
+follow-up watch only acts on a target seen at the same place twice, for the same reason.
 
 For System Report this is a fallback, since the target is terminated before it composites.
 It becomes the primary mechanism for Device Management, where System Settings stays open
@@ -257,4 +283,5 @@ rm -rf ~/Applications/"System Information.app"
 | `verify.swift` | Prints which windows are actually on screen |
 | `pidwatch.swift` | Standalone pid-diff, used to find the xpcproxy exec behaviour |
 | `titlewatch.swift` | Checks whether `kCGWindowName` is readable |
+| `winprobe.swift` | Window-server view of a pid's windows incl. off-screen (`kCGWindowIsOnscreen`) and display geometry |
 | `parsetest.swift` | Dumps the parsed tree for diffing against system_profiler |

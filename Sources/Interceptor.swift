@@ -105,7 +105,12 @@ final class Interceptor {
         return n > 0 ? String(cString: buf) : ""
     }
 
+    /// Development switch: while this file exists nothing is intercepted, so Apple's UI can
+    /// be studied side by side with the replacement.
+    static let pausePath = "/tmp/nsi.pause"
+
     private func tick() {
+        if FileManager.default.fileExists(atPath: Interceptor.pausePath) { primed = false; return }
         let current = allPIDs()
         let currentSet = Set(current)
 
@@ -215,6 +220,14 @@ final class Interceptor {
                 if let frame = Coverage.onScreenFrame(pid: pid) {
                     sawPanel = true
                     if frame.width >= Interceptor.reportWindowMinWidth {
+                        // Same rule as at exec: only the About pane's System Report button
+                        // is ours. A report window from Spotlight or `open` is the user's.
+                        var ours = true
+                        if let decide = self?.shouldIntercept { DispatchQueue.main.sync { ours = decide() } }
+                        guard ours else {
+                            Log.mark("pid \(pid) opened a report window outside the About pane - it is the user's, not watching further")
+                            return
+                        }
                         Log.mark("About-mode pid \(pid) opened a report window (\(Int(frame.width))pt) - intercepting")
                         DispatchQueue.main.async { [weak self] in self?.onTrigger?(pid) }
                         self?.suppress(pid)

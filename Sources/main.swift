@@ -20,11 +20,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         interceptor.onTrigger = { [weak controller] pid in
             controller?.presentSystemReport(coveringPID: pid)
         }
-        interceptor.shouldIntercept = {
-            // The System Report button lives in System Settings' About pane. Anything else -
-            // Apple menu, Spotlight, a .spx file - gets Apple's own app.
-            NSWorkspace.shared.frontmostApplication?.bundleIdentifier
-                == DeviceManagementWatcher.settingsBundleID
+        interceptor.shouldIntercept = { [weak dmWatcher] in
+            // The System Report button lives in System Settings' About pane, so all three
+            // must hold. Frontmost alone is not enough: the Apple menu belongs to whatever
+            // app is frontmost, so About This Mac chosen while Settings is frontmost looked
+            // identical - and a wrong kill costs a ~10x LaunchServices relaunch loop.
+            guard NSWorkspace.shared.frontmostApplication?.bundleIdentifier
+                    == DeviceManagementWatcher.settingsBundleID else {
+                Log.mark("decision: Settings not frontmost -> not System Report"); return false
+            }
+            guard dmWatcher?.currentSettingsTitle == "About" else {
+                Log.mark("decision: Settings pane is \"\(dmWatcher?.currentSettingsTitle ?? "nil")\", not About -> not System Report")
+                return false
+            }
+            // The Apple menu drops down from the top-left corner; the mouse is still there
+            // when the launch lands (~150 ms after the click). The System Report button is
+            // never in that region.
+            let mouse = NSEvent.mouseLocation
+            if let screen = NSScreen.screens.first {
+                let fromTop = screen.frame.maxY - mouse.y
+                if mouse.x < 340 && fromTop < 520 {
+                    Log.mark("decision: mouse at top-left (\(Int(mouse.x)), \(Int(fromTop)) from top) -> Apple menu, not System Report")
+                    return false
+                }
+            }
+            Log.mark("decision: System Report")
+            return true
         }
         interceptor.onTargetResurfaced = { [weak controller] pid in
             controller?.reassert(coveringPID: pid)

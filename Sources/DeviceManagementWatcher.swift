@@ -44,6 +44,12 @@ final class DeviceManagementWatcher {
     private let queue = DispatchQueue(label: "dm.watch", qos: .userInteractive)
     private var timer: DispatchSourceTimer?
     private var lastTitle: String?
+
+    /// Most recently observed focused-window title of System Settings ("About" while the
+    /// pane with the System Report button is showing). Read from any queue.
+    var currentSettingsTitle: String? {
+        queue.sync { lastTitle }
+    }
     private var inPane = false
 
     private var observer: AXObserver?

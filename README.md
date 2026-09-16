@@ -5,6 +5,16 @@ A native replacement for macOS System Information that appears when you click
 
 Built and verified on macOS 26.5.2 (Tahoe), `Mac16,1`, Apple silicon.
 
+## Install on a Mac
+
+```bash
+git clone <this repo> ~/Developer/NativeSystemInfo && cd ~/Developer/NativeSystemInfo && ./install.sh
+```
+
+Needs macOS 26 and the Command Line Tools. `install.sh` creates the local signing identity
+(one keychain prompt), builds, installs to `~/Applications`, writes and loads the
+LaunchAgent. Then grant Accessibility once when prompted. `./uninstall.sh` reverses it.
+
 ## Build and run
 
 ```bash

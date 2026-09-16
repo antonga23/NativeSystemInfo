@@ -1,0 +1,7 @@
+# Build output — build.sh recreates this
+build/
+
+# Compiled diagnostic helpers — rebuild from the .swift sources in the project root
+tools/
+
+.DS_Store

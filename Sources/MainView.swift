@@ -243,12 +243,17 @@ final class MainViewController: NSViewController, NSOutlineViewDataSource, NSOut
         let indent = CGFloat(depth) * 12 + 6
         if node.isSection {
             let p = NSMutableParagraphStyle(); p.firstLineHeadIndent = indent; p.headIndent = indent; p.paragraphSpacingBefore = depth == 0 ? 0 : 6
-            text.append(NSAttributedString(string: node.label + ":\n\n", attributes: [.font: bold, .paragraphStyle: p, .foregroundColor: NSColor.labelColor]))
-            let leaves = node.children.filter { !$0.isSection }
+            text.append(NSAttributedString(string: node.label + ":\n" + (depth == 0 ? "\n" : ""), attributes: [.font: bold, .paragraphStyle: p, .foregroundColor: NSColor.labelColor]))
+            let leaves = node.children.filter { $0.kind == .pair }
             let widest = leaves.map { ($0.label + ":").size(withAttributes: [.font: body]).width }.max() ?? 0
             let tab = indent + 4 + widest + 8
             for child in node.children {
                 if child.isSection { append(child, depth: depth + 1, into: text, body: body, bold: bold); continue }
+                if child.kind == .text {
+                    let tp = NSMutableParagraphStyle(); tp.firstLineHeadIndent = indent + 4; tp.headIndent = indent + 4
+                    text.append(NSAttributedString(string: child.label + "\n", attributes: [.font: body, .paragraphStyle: tp, .foregroundColor: NSColor.labelColor]))
+                    continue
+                }
                 let lp = NSMutableParagraphStyle()
                 lp.firstLineHeadIndent = indent + 4; lp.headIndent = tab
                 lp.tabStops = [NSTextTab(textAlignment: .left, location: tab, options: [:])]
@@ -257,7 +262,8 @@ final class MainViewController: NSViewController, NSOutlineViewDataSource, NSOut
             }
         } else {
             let p = NSMutableParagraphStyle(); p.firstLineHeadIndent = indent; p.headIndent = indent
-            text.append(NSAttributedString(string: "\(node.label): \(node.value ?? "")\n", attributes: [.font: body, .paragraphStyle: p, .foregroundColor: NSColor.labelColor]))
+            let line = node.kind == .pair ? "\(node.label): \(node.value ?? "")" : node.label
+            text.append(NSAttributedString(string: line + "\n", attributes: [.font: body, .paragraphStyle: p, .foregroundColor: NSColor.labelColor]))
         }
     }
 }

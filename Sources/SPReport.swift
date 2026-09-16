@@ -2,17 +2,20 @@ import Foundation
 
 /// One node of a system_profiler report: either a labelled value or a section with children.
 final class SPNode: Identifiable {
+    enum Kind { case section, pair, text }
     let id = UUID()
     let label: String
     let value: String?
+    let kind: Kind
     var children: [SPNode] = []
 
-    init(label: String, value: String?) {
+    init(label: String, value: String?, kind: Kind) {
         self.label = label
         self.value = value
+        self.kind = kind
     }
 
-    var isSection: Bool { value == nil }
+    var isSection: Bool { kind == .section }
 }
 
 enum SPReportState {
@@ -50,16 +53,17 @@ enum SPReport {
             // names it, exactly as Apple's UI does.
             if indent == 0 { continue }
 
-            var label = trimmed
-            var value: String?
+            // "Label: value" is a pair; "Label:" alone opens a section; anything else
+            // (payload dictionary dumps such as `Key = "value";`) is a plain text line.
+            let node: SPNode
             if let range = trimmed.range(of: ": ") {
-                label = String(trimmed[trimmed.startIndex..<range.lowerBound])
-                value = String(trimmed[range.upperBound...])
+                node = SPNode(label: String(trimmed[..<range.lowerBound]),
+                              value: String(trimmed[range.upperBound...]), kind: .pair)
             } else if trimmed.hasSuffix(":") {
-                label = String(trimmed.dropLast())
+                node = SPNode(label: String(trimmed.dropLast()), value: nil, kind: .section)
+            } else {
+                node = SPNode(label: trimmed, value: nil, kind: .text)
             }
-
-            let node = SPNode(label: label, value: value)
 
             while let top = stack.last, top.indent >= indent { stack.removeLast() }
 

@@ -83,7 +83,7 @@ final class ReplacementWindowController: NSObject, NSWindowDelegate {
         // isVisible == true throughout, CGWindowList says onscreen == no. Activation puts us
         // in front on its own; the raised level bought nothing and cost the first present.
         window.allowOffscreen = false        // normal constraining while it is a real window
-        window.setFrameOrigin(centeredFrame().origin)
+        window.setFrameOrigin(pendingCoverageOrigin ?? centeredFrame().origin)
         window.makeKeyAndOrderFront(nil)
         Log.mark("present() window ordered front")
 
@@ -97,6 +97,22 @@ final class ReplacementWindowController: NSObject, NSWindowDelegate {
             self?.ensureOnScreen()
         }
     }
+
+    /// Size the parked window to cover `pid` ahead of time, while it is still off-screen.
+    /// Resizing allocates a new backing surface, which is the expensive half of presenting;
+    /// doing it in advance leaves only an origin change on the critical path.
+    func prepareCoverage(forPID pid: pid_t) {
+        guard !presented, window != nil,
+              let target = Coverage.onScreenFrame(pid: pid) else { return }
+        let wanted = Coverage.frameCovering(target, preferred: centeredFrame())
+        guard window.frame.size != wanted.size else { return }
+        window.allowOffscreen = true
+        window.setFrame(NSRect(origin: offscreen, size: wanted.size), display: true)
+        pendingCoverageOrigin = wanted.origin
+        Log.mark("pre-sized parked window to \(Int(wanted.width))x\(Int(wanted.height))")
+    }
+
+    private var pendingCoverageOrigin: NSPoint?
 
     /// System Report always opens on Hardware, whatever was selected last time.
     func presentSystemReport(coveringPID pid: pid_t) {
@@ -206,6 +222,7 @@ final class ReplacementWindowController: NSObject, NSWindowDelegate {
     func windowWillClose(_ notification: Notification) {
         Log.mark("window closing -> idle")
         presented = false
+        pendingCoverageOrigin = nil
         coverageTimer?.invalidate()
         coverageTimer = nil
         onScreenTimer?.invalidate()

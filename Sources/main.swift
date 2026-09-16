@@ -34,6 +34,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // reveal Apple's Device Management sitting underneath.
             dmWatcher?.sendSettingsToGeneral()
         }
+        dmWatcher.onSettingsVisible = { [weak controller] pid in
+            controller?.prepareCoverage(forPID: pid)
+        }
         dmWatcher.start()
 
         // Accessibility is only needed for Device Management: the pane's extension process

@@ -1,20 +1,22 @@
 import AppKit
 import ApplicationServices
+import Darwin
 
 /// Detects when System Settings is showing the Device Management pane.
 ///
 /// Two signals, because neither is sufficient alone:
 ///
-///  * `ProfilesSettingsExt.appex` runs as its own process, so its exec is a free,
-///    permission-less signal - but it is spawned once and then **persists** across
-///    navigation (verified: same pid after leaving and returning), so it only catches
-///    the first visit of a System Settings session.
-///  * The Accessibility title of System Settings' focused window tracks the current pane.
-///    That covers every subsequent visit, and needs the Accessibility permission.
+///  * `ProfilesSettingsExt.appex` exec (Interceptor kills it there). This is the only
+///    signal that arrives BEFORE Apple's pane draws, so it is the only one that gives a
+///    genuinely flash-free transition.
+///  * The Accessibility title of System Settings' focused window. This changes only once
+///    the pane has already drawn, so it is a fallback that costs a few visible frames.
 ///
-/// The AX signal is event-driven (`AXObserver`), with a 50 ms poll as a fallback. Polling
-/// alone at 200 ms let Apple's pane show for up to a frame's worth of time before the
-/// replacement covered it - that was the occasional visible flash.
+/// Measured over 6 visits with a freshly launched System Settings: 4 via exec, 2 via title.
+/// The extension usually dies and is relaunched per visit, but occasionally one survives
+/// and is then reused, and every visit after that falls back to the title until something
+/// clears it. Forcing the issue by reaping the extension while idle was tried and reverted
+/// - see the note in tick().
 ///
 /// Unlike System Report, the target is NOT terminated. Device Management is a pane inside
 /// System Settings, which the user may still want for other panes; the replacement is
@@ -32,6 +34,12 @@ final class DeviceManagementWatcher {
 
     /// Called on the main queue with System Settings' pid when the pane becomes visible.
     var onEnterPane: ((pid_t) -> Void)?
+
+    /// Periodic, while System Settings has a window on screen. Lets the replacement size
+    /// itself to cover that window before it is needed.
+    var onSettingsVisible: ((pid_t) -> Void)?
+
+    private var lastPrepare = Date.distantPast
 
     private let queue = DispatchQueue(label: "dm.watch", qos: .userInteractive)
     private var timer: DispatchSourceTimer?
@@ -107,8 +115,18 @@ final class DeviceManagementWatcher {
         if pid != observedPID {
             DispatchQueue.main.async { [weak self] in self?.installObserver(pid: pid) }
         }
+        if Date().timeIntervalSince(lastPrepare) > 1 {
+            lastPrepare = Date()
+            DispatchQueue.main.async { [weak self] in self?.onSettingsVisible?(pid) }
+        }
         evaluate(pid: pid, reason: "poll")
     }
+
+    // NOTE: proactively reaping the idle extension was tried and reverted. It does force an
+    // exec on every visit, but killing the extension repeatedly trips ExtensionKit's
+    // relaunch backoff: System Settings then cannot open the pane at all — clicking Device
+    // Management did nothing, with no exec, no title change and no window. Killing it once
+    // per visit (in Interceptor) stays within what ExtensionKit tolerates.
 
     /// Runs on `queue`. Reads the focused window title and fires on entering the pane.
     private func evaluate(pid: pid_t, reason: String) {
@@ -131,6 +149,10 @@ final class DeviceManagementWatcher {
             lastTitle = title
         }
 
+        // NOTE: the sidebar's selected row was tried as an earlier trigger, on the theory
+        // that selection changes on click while the title only changes once the pane has
+        // drawn. Measured: the selection never updated away from "General" at all, so it
+        // carries no signal. Removed rather than left walking the tree every 50 ms.
         let isPane = DeviceManagementWatcher.paneTitles.contains(title.lowercased())
         if isPane && !inPane {
             fire(pid: pid, reason: "AX title (\(reason))")

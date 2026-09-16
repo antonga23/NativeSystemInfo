@@ -21,6 +21,17 @@ final class Interceptor {
     static let targetExecutable =
         "/System/Applications/Utilities/System Information.app/Contents/MacOS/System Information"
 
+    /// Apple menu > About This Mac. This launcher (`com.apple.AboutThisMacLauncher`) tells
+    /// `com.apple.systemprofiler` to `showAboutThisMac`, so the About panel is drawn by the
+    /// very binary this class intercepts. Without special-casing it, opening About This Mac
+    /// triggers the replacement, which is not what that menu item means.
+    static let aboutLauncherExecutable =
+        "/System/Library/CoreServices/Applications/About This Mac.app/Contents/MacOS/About This Mac"
+
+    /// The About panel is ~280pt wide; the System Report window is ~900pt+. Used to tell
+    /// which window a surviving About-mode process has opened.
+    static let reportWindowMinWidth: CGFloat = 600
+
     /// Called on the main queue with the pid of the launching target.
     var onTrigger: ((pid_t) -> Void)?
 
@@ -45,6 +56,10 @@ final class Interceptor {
     /// is still xpcproxy, and checking its path once misses the app entirely.
     private var pending: [pid_t: Date] = [:]
     private static let proxyPath = "/usr/libexec/xpcproxy"
+
+    /// Set when the About This Mac launcher execs. A System Information launch inside this
+    /// window belongs to the Apple menu and is left alone.
+    private var aboutGraceUntil = Date.distantPast
 
     func start() {
         let t = DispatchSource.makeTimerSource(queue: pollQueue)
@@ -105,7 +120,10 @@ final class Interceptor {
         for (pid, deadline) in pending {
             if !currentSet.contains(pid) || now > deadline { pending.removeValue(forKey: pid); continue }
             let path = executablePath(pid)
-            if path == Interceptor.targetExecutable {
+            if path == Interceptor.aboutLauncherExecutable {
+                pending.removeValue(forKey: pid)
+                noteAboutLauncher()
+            } else if path == Interceptor.targetExecutable {
                 pending.removeValue(forKey: pid)
                 fire(pid)
             } else if path == DeviceManagementWatcher.profilesExtExecutable {
@@ -118,7 +136,9 @@ final class Interceptor {
 
         for pid in new {
             let path = executablePath(pid)
-            if path == Interceptor.targetExecutable {
+            if path == Interceptor.aboutLauncherExecutable {
+                noteAboutLauncher()
+            } else if path == Interceptor.targetExecutable {
                 fire(pid)
             } else if path == DeviceManagementWatcher.profilesExtExecutable {
                 profilesExtensionLaunched(pid)
@@ -140,14 +160,61 @@ final class Interceptor {
         DispatchQueue.main.async { [weak self] in self?.onProfilesExtensionLaunched?() }
     }
 
+    /// Measured: the launcher execs ~17 ms after its pid appears (it starts as xpcproxy, so
+    /// the pending re-check is what catches it), lives ~147 ms, and System Information execs
+    /// ~143 ms after the launcher. The grace window comfortably covers that.
+    private func noteAboutLauncher() {
+        aboutGraceUntil = Date().addingTimeInterval(6)
+        Log.mark("About This Mac launcher exec - System Information launches are the Apple menu's")
+    }
+
     private func fire(_ pid: pid_t) {
         // Escape hatch: hold Option while clicking System Report for Apple's own UI.
         // CGEventSource is thread-safe; NSEvent.modifierFlags is main-thread only.
         if CGEventSource.flagsState(.combinedSessionState).contains(.maskAlternate) { return }
 
+        if Date() < aboutGraceUntil {
+            Log.mark("target pid \(pid) is About This Mac - leaving it alone")
+            watchAboutModeProcess(pid)
+            return
+        }
+
         Log.mark("detected target pid \(pid) at exec")
         DispatchQueue.main.async { [weak self] in self?.onTrigger?(pid) }
         suppress(pid)
+    }
+
+    /// An About-This-Mac instance is allowed to live, which leaves System Information
+    /// running. "System Report" from that flow then opens a *new window in the existing
+    /// process* - no exec, so exec detection cannot see it, and Apple's report window ends
+    /// up on top of the replacement.
+    ///
+    /// So: watch this process. If it opens a report-sized window, intercept it. Once its
+    /// About panel goes away, kill the process so the invariant "System Information is not
+    /// running" is restored and the next System Report click is a clean exec again.
+    private func watchAboutModeProcess(_ pid: pid_t) {
+        killQueue.async { [weak self] in
+            let deadline = Date().addingTimeInterval(300)
+            var sawPanel = false
+            while Date() < deadline {
+                guard self != nil, kill(pid, 0) == 0 else { return }   // process gone
+
+                if let frame = Coverage.onScreenFrame(pid: pid) {
+                    sawPanel = true
+                    if frame.width >= Interceptor.reportWindowMinWidth {
+                        Log.mark("About-mode pid \(pid) opened a report window (\(Int(frame.width))pt) - intercepting")
+                        DispatchQueue.main.async { [weak self] in self?.onTrigger?(pid) }
+                        self?.suppress(pid)
+                        return
+                    }
+                } else if sawPanel {
+                    Log.mark("About This Mac panel closed - terminating pid \(pid) to restore clean interception")
+                    kill(pid, SIGKILL)
+                    return
+                }
+                usleep(30_000)
+            }
+        }
     }
 
     // MARK: - suppression

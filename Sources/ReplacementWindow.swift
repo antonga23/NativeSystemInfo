@@ -19,7 +19,7 @@ final class ReplacementWindowController: NSObject, NSWindowDelegate {
     private let store = SPReportStore()
     private var titleObserver: AnyCancellable?
     private let offscreen = NSPoint(x: -14_000, y: -14_000)
-    private let defaultSize = NSSize(width: 1080, height: 720)
+    private let defaultSize = NSSize(width: 910, height: 602)
 
     private var window: PrewarmWindow!
     private var presented = false
@@ -34,14 +34,21 @@ final class ReplacementWindowController: NSObject, NSWindowDelegate {
                               defer: false)
         w.title = "System Information"
         w.isReleasedWhenClosed = false
-        w.minSize = NSSize(width: 840, height: 560)
+        w.minSize = NSSize(width: 700, height: 400)
         w.titlebarSeparatorStyle = .automatic
         // Ordering the parked window front pins it to whatever Space is active at agent
         // start. Presenting it later then triggers a Space switch - a ~700 ms desktop slide
         // during which every window reports intermediate positions. Follow the user instead.
         w.collectionBehavior = [.moveToActiveSpace]
         w.delegate = self
-        w.contentView = NSHostingView(rootView: RootView(store: store))
+        // Title sits to the right of the sidebar, as in Apple's window: a unified toolbar
+        // holding only a sidebar tracking separator does exactly that.
+        let vc = MainViewController(store: store)
+        w.contentViewController = vc
+        w.styleMask.insert(.fullSizeContentView)
+        w.titleVisibility = .hidden
+        w.titlebarAppearsTransparent = true
+        w.setContentSize(defaultSize)
         w.setFrameOrigin(offscreen)
         w.orderFrontRegardless()          // composited, just not where anyone can see it
 
@@ -56,7 +63,7 @@ final class ReplacementWindowController: NSObject, NSWindowDelegate {
         // Apple titles the window with the model name ("MacBook Pro"), which is only known
         // once the hardware report has been read.
         titleObserver = store.$modelName.receive(on: DispatchQueue.main).sink { [weak w] name in
-            w?.title = name
+            w?.title = name      // hidden, but keeps Mission Control / Dock labels right
         }
     }
 

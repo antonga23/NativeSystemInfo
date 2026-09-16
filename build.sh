@@ -22,7 +22,8 @@ swiftc -O \
     Sources/Coverage.swift \
     Sources/Interceptor.swift \
     Sources/ReplacementWindow.swift \
-    Sources/RootView.swift
+    Sources/RootView.swift \
+    Sources/MainView.swift
 
 cp Info.plist "$APP/Contents/Info.plist"
 

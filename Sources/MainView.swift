@@ -19,6 +19,7 @@ final class MainViewController: NSViewController, NSOutlineViewDataSource, NSOut
     private let statusIcon = NSImageView()
     private let statusLabel = NSTextField(labelWithString: "")
     private var splitHost: NSView!
+    private var contentColumn: NSView!
     /// Apple shows the model name as a bold 13pt title at the top of the content column,
     /// with no toolbar band. The window's own title is hidden and this label stands in.
     private let titleLabel = NSTextField(labelWithString: "")
@@ -31,6 +32,7 @@ final class MainViewController: NSViewController, NSOutlineViewDataSource, NSOut
 
     override func loadView() {
         view = NSView(frame: NSRect(x: 0, y: 0, width: 910, height: 602))
+        preferredContentSize = NSSize(width: 910, height: 602)   // otherwise the window shrinks to the split view's 209pt fitting width
 
         // sidebar
         outline.headerView = nil
@@ -73,7 +75,12 @@ final class MainViewController: NSViewController, NSOutlineViewDataSource, NSOut
         statusLabel.textColor = .secondaryLabelColor
         for v in [sep, statusIcon, statusLabel] { v.translatesAutoresizingMaskIntoConstraints = false; status.addSubview(v) }
         // content column: title + report
-        let content = NSView()
+        let content = NSView(); contentColumn = content
+        // Without these the split view's fitting width is 200 + 1pt and the window shrinks to
+        // 209pt when the controller is installed. Apple's window is 910x602.
+        content.translatesAutoresizingMaskIntoConstraints = false
+        content.widthAnchor.constraint(greaterThanOrEqualToConstant: 702).isActive = true
+        content.heightAnchor.constraint(greaterThanOrEqualToConstant: 400).isActive = true
         titleLabel.font = .boldSystemFont(ofSize: 13)
         titleLabel.translatesAutoresizingMaskIntoConstraints = false
         contentScroll.translatesAutoresizingMaskIntoConstraints = false
@@ -119,6 +126,11 @@ final class MainViewController: NSViewController, NSOutlineViewDataSource, NSOut
                 sidebarScroll.contentInsets = NSEdgeInsets(top: 26, left: 0, bottom: 0, right: 0)
 
         bind()
+    }
+
+    override func viewDidLayout() {
+        super.viewDidLayout()
+        Log.mark("layout: view \(NSStringFromRect(view.frame)) split \(NSStringFromRect(splitHost.frame)) sidebar \(NSStringFromRect(sidebarScroll.frame)) content \(NSStringFromRect(contentColumn.frame)) scroll \(NSStringFromRect(contentScroll.frame))")
     }
 
     private func bind() {

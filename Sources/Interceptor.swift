@@ -35,6 +35,12 @@ final class Interceptor {
     /// Called on the main queue with the pid of the launching target.
     var onTrigger: ((pid_t) -> Void)?
 
+    /// Decides whether a System Information launch is the System Report button. Called on
+    /// the main queue. System Report is clicked with System Settings frontmost on its About
+    /// pane; Apple menu > About This Mac is clicked from whatever app owns the menu bar. The
+    /// launch itself carries no intent (identical arguments), so this context is the signal.
+    var shouldIntercept: (() -> Bool)?
+
     /// Called on the main queue when the target managed to put a window back on screen,
     /// so the replacement can re-assert itself in front.
     var onTargetResurfaced: ((pid_t) -> Void)?
@@ -173,8 +179,15 @@ final class Interceptor {
         // CGEventSource is thread-safe; NSEvent.modifierFlags is main-thread only.
         if CGEventSource.flagsState(.combinedSessionState).contains(.maskAlternate) { return }
 
-        if Date() < aboutGraceUntil {
-            Log.mark("target pid \(pid) is About This Mac - leaving it alone")
+        // Killing a launch that turns out to be About This Mac is not a one-off mistake: LS
+        // treats the death as a crash and relaunches ~10 times, we re-present on each, and
+        // afterwards LS stops honouring launches of the app entirely. Get this right first.
+        var intercept = Date() >= aboutGraceUntil
+        if intercept, let decide = shouldIntercept {
+            DispatchQueue.main.sync { intercept = decide() }
+        }
+        if !intercept {
+            Log.mark("target pid \(pid) not launched from the About pane - leaving it alone")
             watchAboutModeProcess(pid)
             return
         }

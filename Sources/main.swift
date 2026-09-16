@@ -20,6 +20,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         interceptor.onTrigger = { [weak controller] pid in
             controller?.presentSystemReport(coveringPID: pid)
         }
+        interceptor.shouldIntercept = {
+            // The System Report button lives in System Settings' About pane. Anything else -
+            // Apple menu, Spotlight, a .spx file - gets Apple's own app.
+            NSWorkspace.shared.frontmostApplication?.bundleIdentifier
+                == DeviceManagementWatcher.settingsBundleID
+        }
         interceptor.onTargetResurfaced = { [weak controller] pid in
             controller?.reassert(coveringPID: pid)
         }

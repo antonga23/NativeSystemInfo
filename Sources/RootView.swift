@@ -5,15 +5,16 @@ import SwiftUI
 struct Selection: Hashable {
     let dataType: String
     let title: String
+
+    static let hardware = Selection(dataType: "SPHardwareDataType", title: "Hardware")
+
+    /// Not a system_profiler type - rendered by DeviceManagementPane.
+    static let deviceManagement = Selection(dataType: "NSIDeviceManagement",
+                                            title: "Device Management")
 }
 
 struct RootView: View {
     @ObservedObject var store: SPReportStore
-    // Set here rather than in .onAppear: onAppear does not fire while the window is parked
-    // off-screen, which left the detail pane empty until first present and forced a full
-    // SwiftUI render at exactly the moment that needs to be instant.
-    @State private var selection: Selection? = Selection(dataType: "SPHardwareDataType",
-                                                         title: "Hardware")
     @State private var expanded: Set<String> = ["Hardware"]
 
     var body: some View {
@@ -28,7 +29,7 @@ struct RootView: View {
     // MARK: - sidebar
 
     private var sidebar: some View {
-        List(selection: $selection) {
+        List(selection: $store.selection) {
             ForEach(store.groups) { group in
                 DisclosureGroup(isExpanded: binding(for: group.name)) {
                     ForEach(group.items) { item in
@@ -40,11 +41,22 @@ struct RootView: View {
                         .tag(Selection(dataType: group.id, title: group.name))
                 }
             }
+            DisclosureGroup(isExpanded: binding(for: "Management")) {
+                Text(Selection.deviceManagement.title)
+                    .tag(Selection.deviceManagement)
+            } label: {
+                Text("Management")
+            }
         }
         .listStyle(.sidebar)
         .navigationSplitViewColumnWidth(min: 220, ideal: 260, max: 380)
-        .onChange(of: selection) { _, new in
-            if let new { store.request(new.dataType) }
+        .onChange(of: store.selection) { _, new in
+            guard let new else { return }
+            if new == Selection.deviceManagement {
+                store.loadDeviceManagement()
+            } else {
+                store.request(new.dataType)
+            }
         }
     }
 
@@ -63,7 +75,9 @@ struct RootView: View {
     private var detail: some View {
         VStack(spacing: 0) {
             Group {
-                if let selection {
+                if store.selection == Selection.deviceManagement {
+                    DeviceManagementPane(info: store.deviceManagement)
+                } else if let selection = store.selection {
                     ReportView(state: store.state(for: selection.dataType))
                 } else {
                     Color.clear
@@ -84,7 +98,7 @@ struct RootView: View {
             Image(systemName: "chevron.right")
                 .font(.caption2)
                 .foregroundStyle(.tertiary)
-            Text(selection?.title ?? "")
+            Text(store.selection?.title ?? "")
             Spacer()
         }
         .font(.callout)
@@ -153,6 +167,79 @@ struct NodeView: View {
                 Spacer(minLength: 0)
             }
             .font(.system(size: 13))
+        }
+    }
+}
+
+// MARK: - device management
+
+struct DeviceManagementPane: View {
+    let info: DeviceManagementInfo?
+
+    var body: some View {
+        if let info {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 26) {
+                    HStack(spacing: 10) {
+                        Circle()
+                            .fill(dotColor(info))
+                            .frame(width: 10, height: 10)
+                        Text(info.headline)
+                            .font(.system(size: 20, weight: .semibold))
+                    }
+
+                    DMSection(title: "This Mac", rows: info.thisMac)
+                    DMSection(title: "Management", rows: info.management)
+                    DMSection(title: "Configuration Profiles", rows: info.profiles)
+
+                    Text("Profile contents and device-scope details require administrator "
+                         + "privileges and are not shown.")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                }
+                .padding(28)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        } else {
+            VStack(spacing: 10) {
+                ProgressView()
+                Text("Reading management state…").foregroundStyle(.secondary)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+    }
+
+    private func dotColor(_ info: DeviceManagementInfo) -> Color {
+        guard info.determined else { return .secondary }
+        return info.managed ? .orange : .green
+    }
+}
+
+struct DMSection: View {
+    let title: String
+    let rows: [DMRow]
+
+    var body: some View {
+        if !rows.isEmpty {
+            VStack(alignment: .leading, spacing: 10) {
+                Text(title).font(.headline)
+                VStack(spacing: 0) {
+                    ForEach(Array(rows.enumerated()), id: \.element.id) { index, row in
+                        if index > 0 { Divider() }
+                        HStack(alignment: .firstTextBaseline, spacing: 12) {
+                            Text(row.label)
+                                .foregroundStyle(.secondary)
+                                .frame(width: 300, alignment: .leading)
+                            Text(row.value).textSelection(.enabled)
+                            Spacer(minLength: 0)
+                        }
+                        .font(.system(size: 13))
+                        .padding(.vertical, 7)
+                        .padding(.horizontal, 12)
+                    }
+                }
+                .background(.quaternary.opacity(0.4), in: RoundedRectangle(cornerRadius: 10))
+            }
         }
     }
 }

@@ -181,6 +181,11 @@ final class SPReportStore: ObservableObject {
     @Published var modelName: String = sysctlString("hw.model") ?? "Mac"
     @Published var serialNumber: String = ""
 
+    /// Owned by the store rather than the view so the interceptor can drive it - selecting
+    /// Device Management when System Settings navigates there.
+    @Published var selection: Selection? = Selection.hardware
+    @Published var deviceManagement: DeviceManagementInfo?
+
     private var inFlight = Set<String>()
     private let queue = DispatchQueue(label: "sp.report", qos: .userInitiated, attributes: .concurrent)
 
@@ -193,6 +198,14 @@ final class SPReportStore: ObservableObject {
     }
 
     func state(for dataType: String) -> SPReportState { states[dataType] ?? .idle }
+
+    func loadDeviceManagement(force: Bool = false) {
+        if deviceManagement != nil && !force { return }
+        queue.async { [weak self] in
+            let info = DeviceManagement.collect()
+            DispatchQueue.main.async { self?.deviceManagement = info }
+        }
+    }
 
     func request(_ dataType: String) {
         guard states[dataType] == nil, !inFlight.contains(dataType) else { return }

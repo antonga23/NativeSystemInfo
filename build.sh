@@ -17,6 +17,8 @@ swiftc -O \
     Sources/Log.swift \
     Sources/SystemData.swift \
     Sources/SPReport.swift \
+    Sources/DeviceManagement.swift \
+    Sources/DeviceManagementWatcher.swift \
     Sources/Coverage.swift \
     Sources/Interceptor.swift \
     Sources/ReplacementWindow.swift \

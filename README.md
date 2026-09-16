@@ -74,6 +74,56 @@ The agent cannot intercept a launch that happens before it is running. It is ins
 a LaunchAgent with `RunAtLoad` and `KeepAlive`, so it starts at login and is restarted if
 it dies (verified: `kill -9` → new pid within 3 s, `runs = 2`).
 
+## Device Management
+
+Navigating to **System Settings → General → Device Management** presents the replacement's
+Device Management pane in front, sized to cover System Settings' window.
+
+System Settings is **not** terminated — unlike System Report, this is a pane inside an app
+the user may still want for other panes. That makes coverage load-bearing rather than a
+fallback: the replacement frame is unioned with the target's real window bounds so nothing
+peeks out at the edges. Verified over three consecutive visits: replacement at
+`215,100 1082×853`, System Settings at `261,101 723×851` — fully contained, and stable in
+size. (Union against the *default* frame, not the current one; unioning with the current
+frame ratchets the window larger on every visit until it fills the screen.)
+
+Two detection signals, because neither is sufficient:
+
+| Signal | Permission | Covers |
+| --- | --- | --- |
+| `ProfilesSettingsExt.appex` exec | none | first visit per Settings session |
+| System Settings' focused-window AX title | Accessibility | every visit |
+
+`ProfilesSettingsExt.appex` genuinely runs as its own process, so its exec is a free
+signal. But it is spawned once and then **persists** across navigation — verified: the same
+pid after leaving the pane and returning — so on its own it only ever fires the first time.
+
+The Accessibility title covers the rest. The observed titles on this OS version were
+confirmed from the log rather than assumed:
+
+```
+System Settings focused window title: "Accessibility"
+System Settings focused window title: "Wi-Fi"
+System Settings focused window title: "Device Management"
+device management: entered pane via AX title
+```
+
+Window titles via `CGWindowList` (`kCGWindowName`) would have avoided Accessibility, but
+that field requires **Screen Recording**, which is the heavier grant — and it returned nil
+without it, so it is not a free alternative.
+
+Without the Accessibility grant the app still works; Device Management detection is just
+limited to the first visit, and that is logged at startup.
+
+### What the pane reports
+
+Management state is reported exactly as found, with one trap handled explicitly:
+`profiles(1)` run unprivileged reports **user scope only**, so it claims "no configuration
+profiles" on a machine with many device-scope profiles installed. The pane uses the
+device-scope marker file `/var/db/ConfigurationProfiles/Settings/.profilesAreInstalled`
+instead, and labels profile contents as requiring administrator privileges rather than
+rendering them as "None".
+
 ## Full coverage
 
 `Coverage` reads the target's on-screen window bounds from `CGWindowListCopyWindowInfo`
@@ -178,9 +228,9 @@ rm -rf ~/Applications/"System Information.app"
 - Interception is keyed on the target's executable path, so it also catches `.spx` files
   and Option-clicking the Apple menu. Hold Option to bypass. A document-aware check was
   considered and deliberately not added — determinism was preferred over the special case.
-- Device Management interception is not implemented. It needs an `AXObserver` on System
-  Settings (Accessibility permission, grantable — the managed PPPC profile on this Mac
-  pre-approves rather than denies). The stable signature above is the prerequisite.
+- Device Management detection falls back to first-visit-only without the Accessibility
+  grant. Grant it in Privacy & Security > Accessibility; the stable signature means the
+  grant survives rebuilds.
 - Cmd-Q closes the window and returns the agent to idle rather than terminating, so the
   pre-warmed window survives. Kill it with `pkill -f MacOS/NativeSystemInfo`.
 - `flashwatch`'s "our window on screen" figure is unreliable and sometimes reports
@@ -198,9 +248,13 @@ rm -rf ~/Applications/"System Information.app"
 | `Sources/Coverage.swift` | `CGWindowList` bounds → AppKit frame |
 | `Sources/SPReport.swift` | system_profiler parsing, sidebar catalog, report cache |
 | `Sources/SystemData.swift` | sysctl / subprocess helpers |
-| `Sources/RootView.swift` | SwiftUI sidebar and report rendering |
+| `Sources/RootView.swift` | SwiftUI sidebar, report and Device Management rendering |
+| `Sources/DeviceManagement.swift` | Management and profile state |
+| `Sources/DeviceManagementWatcher.swift` | Pane detection (exec + AX title) |
 | `Sources/Log.swift` | Timing log at `/tmp/nsi.log` |
 | `probe.swift` | Original timing harness |
 | `flashwatch.swift` | 2 ms sampler that catches brief flashes |
 | `verify.swift` | Prints which windows are actually on screen |
+| `pidwatch.swift` | Standalone pid-diff, used to find the xpcproxy exec behaviour |
+| `titlewatch.swift` | Checks whether `kCGWindowName` is readable |
 | `parsetest.swift` | Dumps the parsed tree for diffing against system_profiler |

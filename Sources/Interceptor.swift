@@ -28,6 +28,11 @@ final class Interceptor {
     /// so the replacement can re-assert itself in front.
     var onTargetResurfaced: ((pid_t) -> Void)?
 
+    /// Called when System Settings' Device Management pane extension execs. Free signal,
+    /// but it only fires on the pane's first visit per Settings session - the extension
+    /// process persists afterwards. See DeviceManagementWatcher.
+    var onProfilesExtensionLaunched: (() -> Void)?
+
     private let pollQueue = DispatchQueue(label: "interceptor.poll", qos: .userInitiated)
     private let killQueue = DispatchQueue(label: "interceptor.kill", attributes: .concurrent)
     private var timer: DispatchSourceTimer?
@@ -103,6 +108,9 @@ final class Interceptor {
             if path == Interceptor.targetExecutable {
                 pending.removeValue(forKey: pid)
                 fire(pid)
+            } else if path == DeviceManagementWatcher.profilesExtExecutable {
+                pending.removeValue(forKey: pid)
+                DispatchQueue.main.async { [weak self] in self?.onProfilesExtensionLaunched?() }
             } else if path != Interceptor.proxyPath && !path.isEmpty {
                 pending.removeValue(forKey: pid)   // became something else entirely
             }
@@ -112,6 +120,8 @@ final class Interceptor {
             let path = executablePath(pid)
             if path == Interceptor.targetExecutable {
                 fire(pid)
+            } else if path == DeviceManagementWatcher.profilesExtExecutable {
+                DispatchQueue.main.async { [weak self] in self?.onProfilesExtensionLaunched?() }
             } else if path == Interceptor.proxyPath || path.isEmpty {
                 pending[pid] = now.addingTimeInterval(3)
             }

@@ -99,6 +99,28 @@ final class ReplacementWindowController: NSObject, NSWindowDelegate {
         }
     }
 
+    /// System Settings navigated to Device Management. Unlike System Report, System Settings
+    /// is left running - the user may want other panes - so the replacement must actually
+    /// cover its window rather than relying on the target being gone.
+    func presentDeviceManagement(coveringPID pid: pid_t) {
+        Log.mark("presenting device management")
+        store.selection = Selection.deviceManagement
+        store.loadDeviceManagement(force: true)
+
+        if !presented { present(coveringPID: pid) }
+
+        // present() only moves the origin, because on the System Report path the target is
+        // already dead and speed matters more than size. Here the target is alive and
+        // visible, so the frame has to actually cover it.
+        // Union against the default frame, not the current one: unioning with the current
+        // frame ratchets the window larger on every visit until it fills the screen.
+        if let target = Coverage.onScreenFrame(pid: pid) {
+            window.setFrame(Coverage.frameCovering(target, preferred: centeredFrame()),
+                            display: true)
+        }
+        reassert(coveringPID: pid)
+    }
+
     /// The target got a window back on screen after being hidden. Re-assert: cover it and
     /// come back to the front. Without this the user ends up looking at Apple's window
     /// sitting on top of the replacement.

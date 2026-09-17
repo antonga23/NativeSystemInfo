@@ -97,9 +97,11 @@ final class ReplacementWindowController: NSObject, NSWindowDelegate {
         NSApp.activate(ignoringOtherApps: true)
         Log.mark("present() activated")
 
+        // Deliberately stays .accessory: no Dock icon, ever. Cmd-W/Cmd-Q come from
+        // NSApp.mainMenu, which keeps working as an invisible key-equivalent table even
+        // though an accessory app never draws a menu bar. (Apple's own System Information
+        // promotes to .regular here and does show a Dock tile - this is a chosen divergence.)
         DispatchQueue.main.async { [weak self] in
-            NSApp.setActivationPolicy(.regular)   // Dock icon + menu bar only while visible
-            Log.mark("present() activation policy regular")
             self?.startCoverageWatch(pid: pid)
             self?.ensureOnScreen()
         }
@@ -120,6 +122,15 @@ final class ReplacementWindowController: NSObject, NSWindowDelegate {
     }
 
     private var pendingCoverageOrigin: NSPoint?
+
+    /// Open straight onto one pane. Capture/demo aid only.
+    func presentPane(dataType: String) {
+        let title = SPCatalog.all.flatMap { [($0.id, $0.name)] + $0.items.map { ($0.id, $0.name) } }
+            .first { $0.0 == dataType }?.1 ?? dataType
+        store.selection = Selection(dataType: dataType, title: title)
+        store.request(dataType)
+        present(coveringPID: nil)
+    }
 
     /// System Report always opens on Hardware, whatever was selected last time.
     func presentSystemReport(coveringPID pid: pid_t) {
@@ -237,7 +248,6 @@ final class ReplacementWindowController: NSObject, NSWindowDelegate {
 
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
-            NSApp.setActivationPolicy(.accessory)
             self.window.allowOffscreen = true
             self.window.setFrameOrigin(self.offscreen)
             self.window.orderFrontRegardless()

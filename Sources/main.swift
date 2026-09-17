@@ -7,7 +7,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let dmWatcher = DeviceManagementWatcher()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        NSApp.setActivationPolicy(.accessory)   // no Dock icon, no menu bar while idle
+        NSApp.setActivationPolicy(.accessory)   // no Dock icon, no menu bar - ever
         buildMenu()
 
         // Capture/demo aid: force an appearance without changing the user's system setting.
@@ -89,6 +89,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if let show = ProcessInfo.processInfo.environment["NSI_SHOW_ON_LAUNCH"] {
             if show.lowercased() == "dm" {
                 controller.presentDeviceManagement(coveringPID: 0)
+            } else if show.hasPrefix("SP") {
+                controller.presentPane(dataType: show)   // capture aid, e.g. NSI_SHOW_ON_LAUNCH=SPFontsDataType
             } else {
                 controller.present(coveringPID: nil)
             }
@@ -118,6 +120,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         appItem.submenu = appMenu
         main.addItem(appItem)
+
+        // Never drawn under .accessory, but the key equivalents still fire. Without an Edit
+        // menu Cmd-A and Cmd-C are dead on the report text, which is selectable.
+        let editItem = NSMenuItem()
+        let editMenu = NSMenu(title: "Edit")
+        editMenu.addItem(withTitle: "Cut", action: #selector(NSText.cut(_:)), keyEquivalent: "x")
+        editMenu.addItem(withTitle: "Copy", action: #selector(NSText.copy(_:)), keyEquivalent: "c")
+        editMenu.addItem(withTitle: "Paste", action: #selector(NSText.paste(_:)), keyEquivalent: "v")
+        editMenu.addItem(.separator())
+        editMenu.addItem(withTitle: "Select All", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
+        editItem.submenu = editMenu
+        main.addItem(editItem)
 
         let windowItem = NSMenuItem()
         let windowMenu = NSMenu(title: "Window")

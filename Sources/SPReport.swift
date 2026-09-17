@@ -78,6 +78,13 @@ enum SPReport {
         return roots
     }
 
+    /// The rows a table should show. Only `.section` roots are records - stray `.text` and
+    /// `.pair` roots are the tails of embedded plist dumps and multi-line log bodies, which
+    /// arrive at root level in the thousands (Logs: 12 records beside 37,493 strays).
+    static func rows(in nodes: [SPNode]) -> [SPNode] {
+        nodes.filter { $0.kind == .section }
+    }
+
     /// Flat label/value lookup across a parsed report, for headline values.
     static func firstValue(_ label: String, in nodes: [SPNode]) -> String? {
         for node in nodes {
@@ -147,13 +154,13 @@ enum SPCatalog {
             SPItem(id: "SPFrameworksDataType",      name: "Frameworks"),
             SPItem(id: "SPInstallHistoryDataType",  name: "Installations"),
             SPItem(id: "SPInternationalDataType",   name: "Language & Region"),
-            SPItem(id: "SPLegacySoftwareDataType",  name: "Legacy Software"),
-            SPItem(id: "SPLogsDataType",            name: "Log Reports"),
+            SPItem(id: "SPLogsDataType",            name: "Logs"),
             SPItem(id: "SPManagedClientDataType",   name: "Managed Client"),
             SPItem(id: "SPPrefPaneDataType",        name: "Preference Panes"),
             SPItem(id: "SPPrintersSoftwareDataType", name: "Printer Software"),
             SPItem(id: "SPConfigurationProfileDataType", name: "Profiles"),
             SPItem(id: "SPRawCameraDataType",       name: "Raw Support"),
+            SPItem(id: "SPLegacySoftwareDataType",  name: "Rosetta Software"),
             SPItem(id: "SPSmartCardsDataType",      name: "SmartCards"),
             SPItem(id: "SPStartupItemDataType",     name: "Startup Items"),
             SPItem(id: "SPSyncServicesDataType",    name: "Sync Services")
@@ -184,6 +191,9 @@ final class SPReportStore: ObservableObject {
     @Published var groups: [SPGroup] = SPCatalog.all
     @Published var modelName: String = sysctlString("hw.model") ?? "Mac"
     @Published var serialNumber: String = ""
+    /// The breadcrumb's leading component is the ComputerName, not the serial. They happen
+    /// to be equal on this MDM-renamed Mac, which masked the wrong source.
+    @Published var computerName: String = Host.current().localizedName ?? "Mac"
 
     /// Owned by the store rather than the view so the interceptor can drive it - selecting
     /// Device Management when System Settings navigates there.

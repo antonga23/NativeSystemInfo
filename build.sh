@@ -17,6 +17,7 @@ swiftc -O \
     Sources/Log.swift \
     Sources/SystemData.swift \
     Sources/SPReport.swift \
+    Sources/SPColumns.swift \
     Sources/DeviceManagement.swift \
     Sources/DeviceManagementWatcher.swift \
     Sources/Coverage.swift \

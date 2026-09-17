@@ -35,6 +35,9 @@ noted because several "fixes" earlier looked fine under a weaker check.
 
 | 27 | **Whole Mac felt hung: our window stopped appearing, Apple menu spun forever** | `rebuildTable` cleared columns with `while let col = tableColumns.last { removeTableColumn(col) }`. NSOutlineView refuses to remove its outline column (logs a warning, leaves it), so the loop never ends; the main thread spins in NSLog, and because the app is active after a present it owns the menu bar - which spins with it | Detach `outlineTableColumn` first, remove from a snapshot array | agent CPU 4% with a table pane loaded vs ~100% hung; `sample` showed the loop |
 
+| 28 | Managed Client header read "Name \| Name \| Value" | Even with `outlineTableColumn = nil`, AppKit kept the old outline column, so each rebuild left one behind | One permanent outline column, retitled per pane; only the other columns are added/removed | capture |
+| 29 | Unmanaged demo contradicted by Profiles / Managed Client panes | Those panes ran `system_profiler` regardless of mode | Masked as "No information found." in demo mode | capture + log `masked: unmanaged demo mode` |
+
 Non-bugs that looked like bugs:
 
 - `flashwatch` reporting "our window at 2 s" — that metric is unreliable; use the app log.

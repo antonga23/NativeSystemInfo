@@ -13,6 +13,7 @@ Read in this order:
    screenshot; use the tools here.
 4. `04-tips-and-traps.md` — macOS behaviours that cost hours to discover.
 5. `05-extending.md` — how to add panes, change the UI, change interception rules.
+7. `07-upgrading.md` — updating a Mac that already has the app installed.
 6. `06-demo-modes.md` — the Device Management demo/real switch. **Read this before trusting
    what that pane says: it defaults to a scripted unmanaged state.**
 

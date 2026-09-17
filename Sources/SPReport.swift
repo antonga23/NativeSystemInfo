@@ -229,8 +229,17 @@ final class SPReportStore: ObservableObject {
         }
     }
 
+    /// In the unmanaged demo the Software panes that would reveal the real MDM state have to
+    /// agree with the Device Management pane, so they read as empty instead of running.
+    static let demoMaskedTypes: Set<String> = ["SPConfigurationProfileDataType", "SPManagedClientDataType"]
+
     func request(_ dataType: String) {
         guard states[dataType] == nil, !inFlight.contains(dataType) else { return }
+        if DMMode.current().isDemo, SPReportStore.demoMaskedTypes.contains(dataType) {
+            states[dataType] = .empty("No information found.")
+            Log.mark("\(dataType) masked: unmanaged demo mode")
+            return
+        }
         inFlight.insert(dataType)
         states[dataType] = .loading
 

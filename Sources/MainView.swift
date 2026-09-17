@@ -25,6 +25,7 @@ final class MainViewController: NSViewController, NSOutlineViewDataSource, NSOut
     private let tableOutline = NSOutlineView()
     private let tableScroll = NSScrollView()
     private let detailSplit = NSSplitView()
+    private let nameColumn = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("__name__"))
     private var tableRows: [SPNode] = []
     private var currentColumns: [SPColumns.Column] = []
     private var splitHost: NSView!
@@ -102,6 +103,12 @@ final class MainViewController: NSViewController, NSOutlineViewDataSource, NSOut
         tableOutline.dataSource = self
         tableOutline.delegate = self
         tableOutline.target = self
+        // One permanent outline column. NSOutlineView will not remove its outline column
+        // even after outlineTableColumn is set to nil - the old one survived and the table
+        // showed "Name | Name | Value". So the first column is never removed, only retitled;
+        // rebuilds add/remove the other columns around it.
+        tableOutline.addTableColumn(nameColumn)
+        tableOutline.outlineTableColumn = nameColumn
         tableScroll.documentView = tableOutline
         tableScroll.hasVerticalScroller = true
         tableScroll.hasHorizontalScroller = true
@@ -255,8 +262,9 @@ final class MainViewController: NSViewController, NSOutlineViewDataSource, NSOut
         // the main thread in NSLog, and because the app is active after a present it takes
         // the menu bar down with it (the Apple menu just spun). Detach the outline column
         // first, then remove from a snapshot so the loop is bounded regardless.
-        tableOutline.outlineTableColumn = nil
-        for col in Array(tableOutline.tableColumns) { tableOutline.removeTableColumn(col) }
+        for col in Array(tableOutline.tableColumns) where col !== nameColumn {
+            tableOutline.removeTableColumn(col)
+        }
         currentColumns = SPColumns.columns(for: selection.dataType)
         tableRows = SPReport.rows(in: nodes)
 
@@ -268,14 +276,15 @@ final class MainViewController: NSViewController, NSOutlineViewDataSource, NSOut
         }
         tableScroll.isHidden = false
 
-        for (index, column) in currentColumns.enumerated() {
-            let id = NSUserInterfaceItemIdentifier(index == 0 ? "__name__" : column.key)
-            let col = NSTableColumn(identifier: id)
+        nameColumn.title = currentColumns[0].title
+        nameColumn.width = 280
+        nameColumn.minWidth = 40
+        for column in currentColumns.dropFirst() {
+            let col = NSTableColumn(identifier: NSUserInterfaceItemIdentifier(column.key))
             col.title = column.title
-            col.width = index == 0 ? 280 : 150
+            col.width = 150
             col.minWidth = 40
             tableOutline.addTableColumn(col)
-            if index == 0 { tableOutline.outlineTableColumn = col }
         }
         tableOutline.reloadData()
         // Apple keeps exactly one row selected once a table is populated.

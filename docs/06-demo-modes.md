@@ -115,6 +115,12 @@ env NSI_SHOW_ON_LAUNCH=dm NSI_APPEARANCE=dark \
 A manually launched instance can land on a different Space; `osascript -e 'tell application
 id "com.alatha.NativeSystemInfo" to activate'` brings it over before capturing.
 
+## Panes masked in demo mode
+
+`SPReportStore.demoMaskedTypes` — Software › **Profiles** and Software › **Managed Client**
+— read "No information found." while the mode is `unmanaged`, so they agree with the Device
+Management pane instead of exposing the real MDM state. In `real` mode they show the machine.
+
 ## Things to know
 
 - **The default is a demo state, not the truth.** On an enrolled Mac the pane will say

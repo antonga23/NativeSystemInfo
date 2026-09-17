@@ -10,6 +10,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.setActivationPolicy(.accessory)   // no Dock icon, no menu bar while idle
         buildMenu()
 
+        // Capture/demo aid: force an appearance without changing the user's system setting.
+        if let want = ProcessInfo.processInfo.environment["NSI_APPEARANCE"] {
+            NSApp.appearance = NSAppearance(named: want.lowercased() == "dark" ? .darkAqua : .aqua)
+            Log.mark("appearance forced to \(want)")
+        }
+
         controller.prewarm()
 
         // A Space switch during present means the window is on the wrong desktop.

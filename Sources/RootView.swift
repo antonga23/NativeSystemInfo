@@ -1,4 +1,6 @@
 import SwiftUI
+import AppKit
+import UniformTypeIdentifiers
 
 /// Sidebar selection: either a group row ("Hardware") or a leaf ("USB").
 /// Both map to a system_profiler data type, which is how Apple's own sidebar behaves.
@@ -75,12 +77,23 @@ struct DeviceManagementPane: View {
     }
 }
 
-/// Mirrors Apple's Device Management pane on an unmanaged Mac: an account row, then an
-/// empty profiles list with an add/remove footer. No hardware table — Apple does not show
-/// one here, and there is no management state to report.
+/// A profile the demo is pretending was added. Nothing is installed: picking a file only
+/// reads its display name so the list has something plausible to show.
+struct DemoProfile: Identifiable, Hashable {
+    let id = UUID()
+    let name: String
+    let detail: String
+}
+
+/// Mirrors Apple's Device Management pane on an unmanaged Mac: an account row, then a
+/// profiles list with an add/remove footer. No hardware table — Apple does not show one
+/// here, and there is no management state to report.
 struct UnmanagedPane: View {
     private let corner: CGFloat = 10
     private var card: Color { Color(nsColor: .quaternaryLabelColor).opacity(0.18) }
+
+    @State private var profiles: [DemoProfile] = []
+    @State private var selection: DemoProfile.ID?
 
     var body: some View {
         VStack(spacing: 14) {
@@ -117,16 +130,27 @@ struct UnmanagedPane: View {
 
     private var profilesList: some View {
         VStack(spacing: 0) {
-            Spacer(minLength: 0)
-            Text("No profiles installed")
-                .font(.system(size: 13))
-                .foregroundStyle(.secondary)
-            Spacer(minLength: 0)
+            if profiles.isEmpty {
+                Spacer(minLength: 0)
+                Text("No profiles installed")
+                    .font(.system(size: 13))
+                    .foregroundStyle(.secondary)
+                Spacer(minLength: 0)
+            } else {
+                ScrollView {
+                    LazyVStack(spacing: 0) {
+                        ForEach(profiles) { profile in
+                            profileRow(profile)
+                        }
+                    }
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
             Divider()
             HStack(spacing: 0) {
-                footerButton("plus", enabled: true)
+                footerButton("plus", enabled: true) { addProfile() }
                 Divider().frame(height: 14)
-                footerButton("minus", enabled: false)   // nothing installed to remove
+                footerButton("minus", enabled: selection != nil) { removeSelected() }
                 Spacer()
             }
             .frame(height: 26)
@@ -142,8 +166,69 @@ struct UnmanagedPane: View {
         .clipShape(RoundedRectangle(cornerRadius: corner, style: .continuous))
     }
 
-    private func footerButton(_ symbol: String, enabled: Bool) -> some View {
-        Button {} label: {
+    private func profileRow(_ profile: DemoProfile) -> some View {
+        let isSelected = selection == profile.id
+        return HStack(spacing: 9) {
+            Image(systemName: "gearshape.fill")
+                .resizable().scaledToFit()
+                .frame(width: 15, height: 15)
+                .foregroundStyle(isSelected ? Color.white : Color.secondary)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(profile.name)
+                    .font(.system(size: 13))
+                Text(profile.detail)
+                    .font(.system(size: 11))
+                    .foregroundStyle(isSelected ? Color.white.opacity(0.8) : Color.secondary)
+            }
+            Spacer(minLength: 0)
+        }
+        .foregroundStyle(isSelected ? Color.white : Color.primary)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(isSelected ? Color.accentColor : Color.clear)
+        .contentShape(Rectangle())
+        .onTapGesture { selection = profile.id }
+    }
+
+    /// Demo only. Opens a picker and reads the chosen file's display name so the list has
+    /// something plausible to show. Nothing is installed, enrolled, uploaded or written -
+    /// the "profiles" live in this view's state and vanish when the window closes.
+    private func addProfile() {
+        let panel = NSOpenPanel()
+        panel.title = "Add Configuration Profile"
+        panel.prompt = "Add"
+        panel.allowsMultipleSelection = false
+        panel.canChooseDirectories = false
+        panel.allowedContentTypes = [.init(filenameExtension: "mobileconfig") ?? .data, .data]
+
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+
+        // Read the display name out of a real .mobileconfig if that is what was picked.
+        var name = url.deletingPathExtension().lastPathComponent
+        var detail = "1 setting"
+        if let data = try? Data(contentsOf: url),
+           let plist = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any] {
+            if let display = plist["PayloadDisplayName"] as? String, !display.isEmpty { name = display }
+            if let org = plist["PayloadOrganization"] as? String, !org.isEmpty { detail = org }
+            else if let content = plist["PayloadContent"] as? [Any] {
+                detail = content.count == 1 ? "1 setting" : "\(content.count) settings"
+            }
+        }
+
+        let profile = DemoProfile(name: name, detail: detail)
+        profiles.append(profile)
+        selection = profile.id
+    }
+
+    private func removeSelected() {
+        guard let id = selection else { return }
+        profiles.removeAll { $0.id == id }
+        selection = nil
+    }
+
+    private func footerButton(_ symbol: String, enabled: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
             Image(systemName: symbol)
                 .font(.system(size: 11, weight: .regular))
                 .frame(width: 28, height: 26)

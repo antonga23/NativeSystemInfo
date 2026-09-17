@@ -86,7 +86,34 @@ Fidelity notes found by review and worth not regressing:
   foreground style suppresses SwiftUI's own disabled attenuation, so the dimmed value has
   to be stated; `secondary` measured ~126 where AppKit's own disabled footer buttons land
   near 199.
-- "Sign In…" and "+" deliberately do nothing — enrolment is Apple's flow, not this app's.
+- "Sign In…" deliberately does nothing — enrolment is Apple's flow, not this app's.
+- Dark mode verified by capture, not inference: badge glyph 255,255,255 on the grey tile,
+  card body 34,33,32, footer strip 42,41,40 (still tinted in the right direction), window
+  30,29,28.
+
+## The "+" button (demo only)
+
+"+" opens a file picker and appends the chosen file to the list; the selected row can be
+removed with "−". **Nothing is installed, enrolled, uploaded or written.** The picker only
+reads the file: if a real `.mobileconfig` is chosen its `PayloadDisplayName` and
+`PayloadOrganization` are read so the row looks plausible, otherwise the filename is used.
+The list lives in the view's `@State` and is gone when the window closes.
+
+This exists so a recording can show a profile appearing in the list. It is not a profile
+installer and must not be presented as one.
+
+## Forcing an appearance for capture
+
+`NSI_APPEARANCE=dark` (or `light`) overrides the app's appearance without touching the
+system setting:
+
+```bash
+env NSI_SHOW_ON_LAUNCH=dm NSI_APPEARANCE=dark \
+    ~/Applications/"System Information.app"/Contents/MacOS/NativeSystemInfo &
+```
+
+A manually launched instance can land on a different Space; `osascript -e 'tell application
+id "com.alatha.NativeSystemInfo" to activate'` brings it over before capturing.
 
 ## Things to know
 

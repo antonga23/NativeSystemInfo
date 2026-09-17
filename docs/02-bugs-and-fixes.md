@@ -33,6 +33,8 @@ noted because several "fixes" earlier looked fine under a weaker check.
 | 25 | Cmd-A / Cmd-C dead on report text | No Edit menu in `NSApp.mainMenu` | Added Edit menu (invisible under `.accessory`, key equivalents still fire) | measured selection range |
 | 26 | **System Report interception silently stopped** | The gate required the pane title == "About", but the title was read from the *focused* window, which after a focus change is a transient with an empty title — the cached "" made the gate decline | Read the **main** window; an empty/unknown title no longer declines, it falls through to the mouse test | 3/3 intercepts after fix |
 
+| 27 | **Whole Mac felt hung: our window stopped appearing, Apple menu spun forever** | `rebuildTable` cleared columns with `while let col = tableColumns.last { removeTableColumn(col) }`. NSOutlineView refuses to remove its outline column (logs a warning, leaves it), so the loop never ends; the main thread spins in NSLog, and because the app is active after a present it owns the menu bar - which spins with it | Detach `outlineTableColumn` first, remove from a snapshot array | agent CPU 4% with a table pane loaded vs ~100% hung; `sample` showed the loop |
+
 Non-bugs that looked like bugs:
 
 - `flashwatch` reporting "our window at 2 s" — that metric is unreliable; use the app log.

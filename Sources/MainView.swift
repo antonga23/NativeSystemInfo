@@ -250,7 +250,13 @@ final class MainViewController: NSViewController, NSOutlineViewDataSource, NSOut
     }
 
     private func rebuildTable(for selection: Selection, nodes: [SPNode]) {
-        while let col = tableOutline.tableColumns.last { tableOutline.removeTableColumn(col) }
+        // NSOutlineView refuses to remove its outline column - it logs a warning and leaves
+        // it in place. A `while tableColumns.last` loop therefore never terminates, spins
+        // the main thread in NSLog, and because the app is active after a present it takes
+        // the menu bar down with it (the Apple menu just spun). Detach the outline column
+        // first, then remove from a snapshot so the loop is bounded regardless.
+        tableOutline.outlineTableColumn = nil
+        for col in Array(tableOutline.tableColumns) { tableOutline.removeTableColumn(col) }
         currentColumns = SPColumns.columns(for: selection.dataType)
         tableRows = SPReport.rows(in: nodes)
 

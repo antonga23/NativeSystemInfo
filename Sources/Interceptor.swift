@@ -41,6 +41,13 @@ final class Interceptor {
     /// launch itself carries no intent (identical arguments), so this context is the signal.
     var shouldIntercept: (() -> Bool)?
 
+    /// Rule for a report window opened by an already-running (About This Mac) instance. By
+    /// the time that window exists LaunchServices has activated System Information itself,
+    /// so "System Settings frontmost" is false on every genuine System Report click via
+    /// About This Mac > More Info > System Report - the exec-time rule declined 100% of them.
+    /// Only the mouse test survives here; the pane title is unknowable once focus has moved.
+    var shouldInterceptSurvivor: (() -> Bool)?
+
     /// Called on the main queue when the target managed to put a window back on screen,
     /// so the replacement can re-assert itself in front.
     var onTargetResurfaced: ((pid_t) -> Void)?
@@ -223,7 +230,7 @@ final class Interceptor {
                         // Same rule as at exec: only the About pane's System Report button
                         // is ours. A report window from Spotlight or `open` is the user's.
                         var ours = true
-                        if let decide = self?.shouldIntercept { DispatchQueue.main.sync { ours = decide() } }
+                        if let decide = self?.shouldInterceptSurvivor { DispatchQueue.main.sync { ours = decide() } }
                         guard ours else {
                             Log.mark("pid \(pid) opened a report window outside the About pane - it is the user's, not watching further")
                             return

@@ -70,8 +70,10 @@ show. Do **not** reap it while idle (bug #17).
 Apple menu → About This Mac launches the *same* System Information binary
 (`About This Mac.app` → `showAboutThisMac`). Launch arguments are identical to System
 Report. Intent comes only from context, hence `shouldIntercept`. A non-intercepted
-instance is watched: a report-sized window (≥600 pt) opened from the About pane is
-intercepted; when its About panel closes, the process is reaped so the next System Report
+instance is watched: a report-sized window (≥600 pt) it opens is intercepted under a
+separate, mouse-only rule (`shouldInterceptSurvivor`) - by the time that window exists
+System Information has activated itself, so the exec-time "Settings frontmost" test is
+always false there; when its About panel closes, the process is reaped so the next System Report
 is a clean exec.
 
 ## Permissions

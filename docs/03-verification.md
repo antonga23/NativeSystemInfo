@@ -41,6 +41,17 @@ open -b com.apple.AboutThisMacLauncher; sleep 3; ./tools/verify
 ```
 Expect Apple's 280×487 panel, **no** `present() begin`, **no** `SIGKILL` in the log. Test with Settings frontmost on General *and* on About (mouse top-left: `tools/mousewarp 60 45`).
 
+## About This Mac › More Info › System Report (survivor path)
+```bash
+./tools/mousewarp 60 45; open -b com.apple.AboutThisMacLauncher; sleep 3          # panel, left alone
+open "x-apple.systempreferences:com.apple.AboutSettings.extension"; sleep 3       # "More Info…"
+osascript -e 'tell application "System Settings" to activate'; ./tools/mousewarp 800 900; sleep 1
+open -g -b com.apple.SystemProfiler; sleep 3.5                                     # same process, new window
+```
+Expect `survivor decision: … -> System Report` and `opened a report window … intercepting`. This
+path is post-render by nature (the window exists before we can see it), so a few frames of
+Apple's report window are expected here - unlike the exec path, which is flash-free.
+
 ## UI parity with Apple
 ```bash
 touch /tmp/nsi.pause; open -a "/System/Applications/Utilities/System Information.app"

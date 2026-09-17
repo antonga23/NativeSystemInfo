@@ -38,6 +38,8 @@ noted because several "fixes" earlier looked fine under a weaker check.
 | 28 | Managed Client header read "Name \| Name \| Value" | Even with `outlineTableColumn = nil`, AppKit kept the old outline column, so each rebuild left one behind | One permanent outline column, retitled per pane; only the other columns are added/removed | capture |
 | 29 | Unmanaged demo contradicted by Profiles / Managed Client panes | Those panes ran `system_profiler` regardless of mode | Masked as "No information found." in demo mode | capture + log `masked: unmanaged demo mode` |
 
+| 30 | **Apple menu › About This Mac › More Info › System Report showed Apple's report, inconsistently** | System Information is already running (the About panel), so System Report opens a window in the *existing* process - no exec. The survivor watcher saw the window but applied the exec-time rule, and by then LaunchServices had activated System Information itself, so "Settings frontmost" was false on every genuine click | Separate survivor rule: mouse-position test only (title and frontmost are unknowable once focus has moved) | 3/3 reproductions intercepted; log `survivor decision` |
+
 Non-bugs that looked like bugs:
 
 - `flashwatch` reporting "our window at 2 s" — that metric is unreliable; use the app log.

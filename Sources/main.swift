@@ -58,6 +58,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             Log.mark("decision: System Report")
             return true
         }
+        interceptor.shouldInterceptSurvivor = {
+            // The About panel process opening a 900pt window is System Report (via About
+            // This Mac > More Info) or, rarely, Spotlight. The one thing it is never is
+            // About This Mac again - and that is what the mouse position rules out.
+            let mouse = NSEvent.mouseLocation
+            if let screen = NSScreen.screens.first {
+                let fromTop = screen.frame.maxY - mouse.y
+                if mouse.x < 340 && fromTop < 520 {
+                    Log.mark("survivor decision: mouse at top-left -> Apple menu, leaving it")
+                    return false
+                }
+            }
+            Log.mark("survivor decision: report window from About-mode process -> System Report")
+            return true
+        }
         interceptor.onTargetResurfaced = { [weak controller] pid in
             controller?.reassert(coveringPID: pid)
         }

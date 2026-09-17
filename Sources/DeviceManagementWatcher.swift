@@ -136,10 +136,18 @@ final class DeviceManagementWatcher {
 
     /// Runs on `queue`. Reads the focused window title and fires on entering the pane.
     private func evaluate(pid: pid_t, reason: String) {
+        // Read the MAIN window, not the focused one. After a focus change the focused
+        // window is briefly a transient with no title, and caching that empty string made
+        // the System Report gate decline silently - the exact failure this rule exists to
+        // avoid. Focused is only a fallback.
         let app = AXUIElementCreateApplication(pid)
         var windowRef: CFTypeRef?
-        guard AXUIElementCopyAttributeValue(app, kAXFocusedWindowAttribute as CFString, &windowRef) == .success,
-              let windowRef else { return }
+        if AXUIElementCopyAttributeValue(app, kAXMainWindowAttribute as CFString, &windowRef) != .success
+            || windowRef == nil {
+            guard AXUIElementCopyAttributeValue(app, kAXFocusedWindowAttribute as CFString, &windowRef) == .success,
+                  windowRef != nil else { return }
+        }
+        guard let windowRef else { return }
         let window = windowRef as! AXUIElement
 
         var titleRef: CFTypeRef?

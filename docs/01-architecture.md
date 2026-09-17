@@ -11,8 +11,11 @@
 | Signing identity | `NativeSystemInfo Local Signing`, self-signed, in the login keychain |
 | Redeploy | `./build.sh && rm -rf ~/Applications/"System Information.app" && cp -R "build/System Information.app" ~/Applications/ && launchctl kickstart -k gui/$(id -u)/com.alatha.nativesysteminfo` |
 
-The app is `LSUIElement`: accessory policy while idle (no Dock icon), switched to
-`.regular` while the window is shown, back to accessory on close. Cmd-Q closes the window
+The app is `LSUIElement` and stays `.accessory` **permanently** — there is no Dock icon at
+any point. Cmd-W/Cmd-Q/Cmd-A/Cmd-C work because `NSApp.mainMenu` acts as an invisible
+key-equivalent table even though an accessory app never draws a menu bar. (Apple's own
+System Information promotes to `.regular` and does show a Dock tile; this is a chosen
+divergence.) Cmd-Q closes the window
 and returns to idle rather than exiting; launchd restarts it if it does die.
 
 ## Sources
@@ -24,7 +27,8 @@ and returns to idle rather than exiting; launchd restarts it if it does die.
 | `DeviceManagementWatcher.swift` | AXObserver + 50 ms poll on System Settings' window title; navigates Settings back to General |
 | `ReplacementWindow.swift` | Pre-warmed off-screen window, present/cover/reassert, coverage watch, `ensureOnScreen` |
 | `Coverage.swift` | `CGWindowList` bounds of another pid → AppKit frame that covers it |
-| `MainView.swift` | AppKit shell matching Apple's layout (sidebar, tab-aligned report text, status bar) |
+| `MainView.swift` | AppKit shell: sidebar, table-over-detail split, `NSPathControl` breadcrumb |
+| `SPColumns.swift` | Table columns read from Apple's `*.spreporter` bundles at runtime |
 | `SPReport.swift` | `system_profiler` text parser, sidebar catalog, report cache |
 | `DeviceManagement.swift`, `RootView.swift` | Device Management data and its SwiftUI pane (hosted) |
 | `Log.swift` | The log |

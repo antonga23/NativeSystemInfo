@@ -25,10 +25,20 @@ noted because several "fixes" earlier looked fine under a weaker check.
 | 18 | Profiles/SmartCards panes bold and spaced wrongly | Parser treated any line without `": "` as a section | Node kinds section/pair/text | parsetest + user screenshots |
 | 19 | Fonts/rows/columns didn't match Apple | Guessed 13 pt; Apple is 11 pt small system font, 15 pt sidebar rows, tab-aligned columns | Measured from 2× captures with interception paused | side-by-side captures |
 
+| 20 | List panes showed only text, no table | Apple's panes are a table over a detail area; we rendered the detail full-height | Table built from Apple's own `SPProperties.plist` column declarations | Profiles/Managed Client captures vs screenshots |
+| 21 | Profiles' first column header read "Apple Internal Card Readers" | Header strings were pooled across all reporter bundles; key names like `_name` are reused with different meanings | Per-bundle strings win, pooled table is fallback only | capture |
+| 22 | Detail pane had zero height under the table | `NSSplitView` gave the table everything | Explicit divider position + holding priorities | capture |
+| 23 | Breadcrumb showed the serial number | It read `SPHardwareDataType`; Apple uses the **ComputerName**. Only looked right because MDM renamed this Mac to its serial | `NSPathControl` with computer name > group > pane > row ancestry | capture |
+| 24 | "Log Reports" / "Legacy Software" / missing "Rosetta Software" | Two mislabelled catalog entries; Rosetta is `SPLegacySoftwareDataType`, never missing | Renamed and reordered | reporter banners |
+| 25 | Cmd-A / Cmd-C dead on report text | No Edit menu in `NSApp.mainMenu` | Added Edit menu (invisible under `.accessory`, key equivalents still fire) | measured selection range |
+| 26 | **System Report interception silently stopped** | The gate required the pane title == "About", but the title was read from the *focused* window, which after a focus change is a transient with an empty title — the cached "" made the gate decline | Read the **main** window; an empty/unknown title no longer declines, it falls through to the mouse test | 3/3 intercepts after fix |
+
 Non-bugs that looked like bugs:
 
 - `flashwatch` reporting "our window at 2 s" — that metric is unreliable; use the app log.
 - `flashwatch` saying "never visible" for Device Management — it only tracks
   `com.apple.SystemProfiler` windows; the DM pane is inside System Settings' window.
+- A harness that leaves *our* window frontmost makes the next System Report decline with
+  "Settings not frontmost" — correct behaviour, not a bug. Re-activate Settings between runs.
 - "accessibility not granted" when the agent is launched from Terminal — TCC attributes a
   Terminal-spawned process to Terminal. Judge AX only via the launchd instance.

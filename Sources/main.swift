@@ -35,8 +35,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     == DeviceManagementWatcher.settingsBundleID else {
                 Log.mark("decision: Settings not frontmost -> not System Report"); return false
             }
-            guard dmWatcher?.currentSettingsTitle == "About" else {
-                Log.mark("decision: Settings pane is \"\(dmWatcher?.currentSettingsTitle ?? "nil")\", not About -> not System Report")
+            // Mouse position is the strong signal and is checked below. The pane title is a
+            // secondary guard against a Spotlight/`open` launch while Settings happens to be
+            // frontmost - but an unknown or empty title must NOT decline, or interception
+            // silently stops, which is worse than the rare wrong intercept it prevents.
+            let pane = dmWatcher?.currentSettingsTitle ?? ""
+            if !pane.isEmpty && pane != "About" {
+                Log.mark("decision: Settings pane is \"\(pane)\", not About -> not System Report")
                 return false
             }
             // The Apple menu drops down from the top-left corner; the mouse is still there

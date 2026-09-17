@@ -79,8 +79,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         // Launched by hand rather than by an interception - show the window straight away.
-        if ProcessInfo.processInfo.environment["NSI_SHOW_ON_LAUNCH"] != nil {
-            controller.present(coveringPID: nil)
+        // NSI_SHOW_ON_LAUNCH=dm opens on Device Management, for recording that pane.
+        if let show = ProcessInfo.processInfo.environment["NSI_SHOW_ON_LAUNCH"] {
+            if show.lowercased() == "dm" {
+                controller.presentDeviceManagement(coveringPID: 0)
+            } else {
+                controller.present(coveringPID: nil)
+            }
         }
     }
 

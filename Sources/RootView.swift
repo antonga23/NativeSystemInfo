@@ -34,10 +34,14 @@ struct DeviceManagementPane: View {
                     DMSection(title: "Management", rows: info.management)
                     DMSection(title: "Configuration Profiles", rows: info.profiles)
 
-                    Text("Profile contents and device-scope details require administrator "
-                         + "privileges and are not shown.")
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
+                    // Only meaningful when there is something withheld: on an unmanaged Mac
+                    // there are no profiles to require privileges for.
+                    if info.managed {
+                        Text("Profile contents and device-scope details require administrator "
+                             + "privileges and are not shown.")
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
+                    }
                 }
                 .padding(28)
                 .frame(maxWidth: .infinity, alignment: .leading)

@@ -60,6 +60,34 @@ launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.alatha.nativesystemi
 
 `NSI_SHOW_ON_LAUNCH=1` (any other value) opens on Hardware.
 
+## The two layouts differ structurally
+
+They are not the same tables with different values:
+
+| | Managed | Unmanaged |
+| --- | --- | --- |
+| Status headline + coloured dot | yes | no |
+| This Mac / Management / Configuration Profiles tables | yes | no |
+| "Work or School Account" row with Sign In… | no | yes |
+| Empty profiles list with +/- footer | no | yes |
+
+`UnmanagedPane` in `Sources/RootView.swift` mirrors Apple's unmanaged pane; the managed
+path keeps the table layout. The branch is on `info.managed`, so a genuinely unmanaged Mac
+in `real` mode also gets the Apple-style layout, which is correct.
+
+Fidelity notes found by review and worth not regressing:
+- The badge glyph is a **fixed white**, not a background-role semantic colour. The tile is
+  mid-grey in both appearances, so a colour that inverts paints a near-black badge in dark
+  mode.
+- The footer strip carries its own `quaternaryLabelColor` overlay (measured 242 vs the card
+  body's 251 in light mode) plus a `clipShape`, because `background(_:in:)` does not clip
+  descendants and the strip's square corners would otherwise escape the card radius.
+- The disabled "−" uses `disabledControlTextColor`, not `secondary`. An explicit
+  foreground style suppresses SwiftUI's own disabled attenuation, so the dimmed value has
+  to be stated; `secondary` measured ~126 where AppKit's own disabled footer buttons land
+  near 199.
+- "Sign In…" and "+" deliberately do nothing — enrolment is Apple's flow, not this app's.
+
 ## Things to know
 
 - **The default is a demo state, not the truth.** On an enrolled Mac the pane will say
